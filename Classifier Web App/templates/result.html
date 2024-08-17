@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timestamps Result</title>
+    <style>
+        .data {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .data th,
+        .data td {
+            border: 1px solid black;
+            padding: 8px;
+        }
+
+        body {
+            background-image: radial-gradient(circle, #2a2094, #281e9f, #251caa, #2119b5, #1c15c0);
+            height: 100vh;
+            overflow: hidden;
+            color: white;
+            font-family: Arial, sans-serif;
+            position: relative;
+        }
+
+        .centered {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .gain-slider {
+            width: 100%;
+        }
+
+        #submit-all {
+            margin-top: 20px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #submit-all:hover {
+            background-color: #0056b3;
+        }
+
+        #download-all {
+            margin-top: 20px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #28a745;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #download-all:hover {
+            background-color: #218838;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        a:link {
+            color: pink;
+            background-color: transparent;
+            text-decoration: none;
+        }
+
+        a:visited {
+            color: pink;
+            background-color: transparent;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 style="text-align:center">Timestamps of Sounds Below 1000Hz</h1>
+    <div>
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Begin (s)</th>
+                    <th>End (s)</th>
+                    <th>Audio Clip</th>
+                    <th>Gain</th>
+                    <th>Download</th>
+                    <th>Correct?</th>
+                    <th>Hopespot</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for index, row in tables[0].iterrows() %}
+                <tr>
+                    <td>{{ row['begin'] }}</td>
+                    <td>{{ row['end'] }}</td>
+                    <td class="centered">
+                        <audio controls id="audio-{{ index }}">
+                            <source src="{{ url_for('static', filename='uploads/' ~ row['audio_clip']) }}" type="audio/wav">
+                            Your browser does not support the audio element.
+                        </audio>
+                    </td>
+                    <td>
+                        <input type="range" min="0" max="5" step="0.1" value="1" id="gain-slider-{{ index }}" data-audio-id="audio-{{ index }}" class="gain-slider">
+                    </td>
+                    <td>
+                        <a href="{{ url_for('static', filename='uploads/' ~ row['audio_clip']) }}" download>
+                            <button>Download Clip</button>
+                        </a>
+                    </td>
+                    <td>
+                        <button>Yes</button>
+                        <button>No</button>
+                    </td>
+                    <td>
+                        <a href="{{ locationLink }}" target="_blank">Link to {{ location }} Hopespot</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="container">
+        <button type="button" onclick="location.href='{{ url_for('index') }}'" id="submit-all">Upload another file</button>
+        <button type="button" onclick="location.href='{{ url_for('download_all') }}'" id="download-all">Download All Clips</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', (event) => {
+            document.querySelectorAll('audio').forEach(function(audioElement) {
+                var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                var source = audioCtx.createMediaElementSource(audioElement);
+                var gainNode = audioCtx.createGain();
+
+                source.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                var gainSlider = document.querySelector('input[data-audio-id="' + audioElement.id + '"]');
+                gainSlider.addEventListener('input', function() {
+                    gainNode.gain.value = this.value;
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>

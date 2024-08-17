@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Audio File</title>
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    
+    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+    <style>
+        body {
+            background: rgb(0,8,37);
+            background: radial-gradient(circle, rgba(0,8,37,1) 0%, rgba(40,18,164,1) 51%, rgba(18,27,148,1) 60%, rgba(28,56,187,1) 65%, rgba(16,41,175,1) 68%, rgba(60,30,196,1) 78%, rgba(0,8,37,1) 90%); 
+            height: 100vh;
+            overflow: hidden;
+            color: white;
+            font-family: Arial, sans-serif;
+            position: relative;
+        }
+        .container{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 100px;
+        }
+        .dropzone{
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            border: 2px dashed #ffffff;
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: center;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        .dz-message{
+            color: white;
+        }
+        #submit-all {
+            margin-top: 20px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #submit-all:hover {
+            background-color: #0056b3;
+        }
+
+        .fish {
+            position: absolute;
+            width: 50px;
+            height: auto;
+            display: none;
+            animation: swim linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes swim-left {
+            from {
+                transform: translateX(-50px);
+            }
+            to {
+                transform: translateX(calc(100vw + 50px));
+            }
+        }
+
+        @keyframes swim-right {
+            from {
+                transform: translateX(calc(100vw + 50px))  scaleX(-1);
+            }
+            to {
+                transform: translateX(-50px) scaleX(-1);
+            }
+        }
+
+        .dz-progress {
+            display: none;
+        }
+        /* SVG progress circle */
+        .progress-circle {
+            position: absolute;
+            top: 47%;
+            left: 50%;
+            width: 650px;
+            height: 650px;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* Prevent the progress bar from blocking interactions */
+            z-index: 5; /* Ensure the progress bar is below the buttons */
+        }
+        .progress-circle circle {
+            fill: none;
+            stroke-width: 4;
+        }
+        .progress-bg {
+            stroke: rgba(255, 255, 255, 0.2);
+        }
+        .progress-bar {
+            stroke: #007bff;
+            stroke-dasharray: 943; /* Circumference of the circle */
+            stroke-dashoffset: 943; /* Hide the progress initially */
+            transition: stroke-dashoffset 0.3s ease;
+        }
+    </style>
+    
+    <script>
+        Dropzone.options.myDropzone = {
+            paramName: "file", // The name that will be used to transfer the file
+            maxFilesize: 50, // MB
+            acceptedFiles: 'audio/*',
+            autoProcessQueue: false,
+            uploadMultiple: false,
+            parallelUploads: 1,
+            dictDefaultMessage: "Drop audio files here or click to upload",
+
+            init: function() {
+                var submitButton = document.querySelector("#submit-all");
+                var myDropzone = this;
+
+                submitButton.addEventListener("click", function() {
+                    let location = document.querySelector("#location-search").value;
+                    let locationInput = document.createElement("input");
+
+                    locationInput.type = "hidden";
+                    locationInput.name = "location";
+                    locationInput.value = location;
+
+                    myDropzone.element.appendChild(locationInput);
+                    myDropzone.processQueue();
+                });
+                
+                this.on("uploadprogress", function(file, progress) {
+                    let circle = document.querySelector('.progress-bar');
+                    let radius = circle.r.baseVal.value;
+                    let circumference = radius * 2 * Math.PI;
+                    let offset = circumference - (progress / 100) * circumference;
+                    circle.style.strokeDashoffset = offset;
+                });
+
+                this.on("success", function(file, response) { 
+                    window.location.href = "/result";
+                });
+
+                this.on("error", function(file, response) {
+                    alert("An error occurred. Please try again.");
+                });
+            }
+        };
+
+        $(function() {
+            const locations = [
+                "Abrolhos Bank", "Aeolian Islands", "Agulhas Front", "Alboran Sea", "Algoa Bay", "Aliwal Shoal", "Andaman Islands", "Argyll Coast and Islands", "Ascension Island", "Atlantis Bank", "Azores Archipelago", "Bahamian Reefs", 
+                "Balearic Islands", "Bering Sea Deep Canyons", "Biological Marine Corridor of Osa", "Blue Cavern State Marine Conservation Area", "Blue Shark Central", "Bocas del Toro Archipelago", "Bunaken Marine Park", "Byron Bay", "Cagarras Islands and Surrounding Waters", "California Seamounts", "Canyon of Caprera", "Cape Whale Coast", "Capurgana and Cabo Tiburon", "Cashes Ledge", "Central Arctic Ocean", "Chagos Archipelago",
+                "Charlie-Gibbs Fracture Zone", "Chichiriviche de la Costa", "Chilean Fjords and Islands","Choroni and Chuao", "Chumash Heritage National Marine Sanctuary","Coastal Southeast Florida", "Coastal Waters of the Black River District", 
+                "Cocos Island", "Cocos-Galápagos Swimway", "Coiba and Cordillera de Coiba", "Conflict Islands", "Coral Sea", "Coral Seamount", "Coral Triangle", "Costa Rica Thermal Dome", "Datan Algal Reef", "East Antarctic",
+                "East Portland Fish Sanctuary", "Eastern Tropical Pacific Seascape", "Egg Island, Bahamas", "Emperor Seamount Chain", "Exmouth Gulf and Ningaloo Coast World Heritage Area", "False Bay", "Farm Pond", "Fish Rock", "Florida Gulf Coast",
+                "French Overseas Territories (Wallis and Futuna)", "Gakkel Ridge", "Galápagos Islands", "George Town", "Georgia Continental Shelf and Blake Plateau", "Ghizilagaj Reserve National Park and Marine Protected Area",
+                "Gold Coast Bay", "Golfo Dulce", "Gotland", "Grand Recif de Toliara", "Great Barrier Reef", "Great Lakes", "Greater Farallones", "Greater Skellig Coast", "Guanahacabibes National Park", "Gulf of California",
+                "Gulf of Guinea", "Gulf of Mexico Deep Reefs", "Hatteras", "Hecate Strait and Queen Charlotte Sound Glass Sponge Reefs", "Henoko-Ōura Coastal Waters", "Hong Kong South", "Houtman Abrolhos", "Humboldt Archipelago",
+                "Inhambane Seascape", "Jaeren Coast", "Jangamo Bay", "Jardines de la Reina", "Kahalu’u Bay", "Kangaroo Island North Coast", "Kep Archipelago", "Kermadec Trench","Kimbe Bay","Knysna Bay", "Kosterfjorden Yttre Hvaler", "Laamu Atoll", "Lakshadweep Islands", "Lesvos", "Little Cayman", 
+                "Long Island Marine Management Area", "Lord Howe Rise", "Mako Shark Metropolis", "Maldive Atolls", "Malpelo Island", "Maputaland", "Mayan Riviera", "Mesoamerican Reefs", "Misool Marine Reserve", "Mohéli", 
+                "Monterey Bay", "Moreton Bay", "Myeik Archipelago", "New York-New Jersey Harbor Estuary", "New Zealand Coastal Waters", "Northeast Iceland", "Northwest Passage", "Nusa Penida Marine Protected Area", "Ocean Cay",                     "Olowalu Reef", "Ombai-Wetar Strait", "Outer Islands of Seychelles", "Pacific Subtropical Convergence Zone", "Palau", "Palmahim Slide", "Palmyra Atoll", "Pangatalan Island","Patagonian Shelf", "Pearl Islands Archipelago",
+                "Plettenberg Bay", "Prince William Sound", "Quirimbas Archipelago", "Revillagigedo Archipelago", "Ross Sea", "Saba and the Saba Bank", "Saint Barthélemy", "Saint Vincent and the Grenadines", "Salas y Gomez and Nazca Ridges", "Salisbury Island",
+                "Salish Sea", "San Francisco Bay", "Sargasso Sea", "Scott Islands", "Shinnecock Bay", "South San Jorge Gulf", "Southeast Shoal of the Grand Banks", "St Helena Island", "Subantarctic Islands and Surrounding Seas", 
+                "Svalbard Archipelago", "Sydney Coast", "Tasman Sea", "Tavarua Island", "Tenerife-La Gomera", "Tetiaroa Atoll", "The Great Fringing Reef of the Red Sea", "The Great Southern Reef", "Tribuga Gulf",
+                "Tropical Pacific Sea of Peru", "Tubbataha Reefs Natural Park", "Varadero’s Coral Reef", "Verde Island Passage", "Walter’s Shoal", "Western Pacific Donut Hole 1", "Western Pacific Donut Hole 2", 
+                "Western Pacific Donut Hole 3", "Western Pacific Donut Hole 4", "Whale and Dolphin Sanctuary of Uruguay", "White Shark Cafe", "Wider Vatika Bay", "Wotho Atoll"
+            ];
+
+            $("#location-search").autocomplete({
+                source: locations,
+                minLength: 2
+            });
+        });
+
+        // JavaScript to generate fish elements and animate them
+        document.addEventListener("DOMContentLoaded", function() {
+            const fishImages = ["{{ url_for('static', filename='fish.png')}}"];
+            const numberOfFish = 10;
+
+            for (let i = 0; i < numberOfFish; i++) {
+                let fish = document.createElement('img');
+                fish.src = fishImages[Math.floor(Math.random() * fishImages.length)];
+                fish.classList.add('fish');
+                fish.style.top = Math.random() * 100 + 'vh';
+                fish.style.animationDuration = Math.random() * 10 + 5 + 's';
+                fish.style.animationDelay = Math.random() * 5 + 's';
+                let direction = Math.random() < 0.5 ? 'left' : 'right';
+                fish.style.animationName = direction === 'left' ? 'swim-left' : 'swim-right';
+                fish.style.transform = direction === 'left' ? 'scaleX(1)' : 'scaleX(-1)';
+                document.body.appendChild(fish);
+
+                setTimeout(() => {
+                    fish.style.display = 'block';
+                }, 100);
+            }
+        });
+    </script>
+</head>
+    <!-- 
+        //TODO: Allow for multiple files to be uploaded at once
+        //TODO: Add a progress bar for each file being uploaded
+        //TODO: Allow locations to be specified for each file individually
+    -->
+
+<body>
+    <h1 style="text-align:center">Upload Audio File</h1>
+    <div class="container">
+        <form action="{{ url_for('upload_file') }}" class="dropzone" id="myDropzone">
+            <div class="dz-message">Drop audio files here or click to upload</div>
+            <input id="location-search" type="text" name="location" placeholder="Enter location" class="form-control">
+            <svg class="progress-circle" width="100%" height="100%" viewBox="0 0 200 200">
+                <circle class="progress-bg" cx="100" cy="100" r="90"></circle>
+                <circle class="progress-bar" cx="100" cy="100" r="90"></circle>
+            </svg>
+        </form>
+        <button type="button" id="submit-all">Upload File</button>
+    </div>
+</body>
+</html>
