@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-import soundfile as sf
 import time
 from maad import sound
 from maad.util import power2dB, format_features
@@ -8,7 +7,7 @@ from maad.rois import create_mask, select_rois
 from maad.features import centroid_features
 import numpy as np
 
-def process_audio(file_path, output_folder):
+def process_audio(file_path):
     print(f"Processing file: {file_path}")
     start_time = time.time()
 
@@ -17,7 +16,7 @@ def process_audio(file_path, output_folder):
         s, fs = sound.load(file_path)
     except Exception as e:
         print(f"Error loading file {file_path}: {e}")
-        return pd.DataFrame()
+        return 0
 
     s_filt = sound.select_bandwidth(s, fs, fcut=100, forder=3, ftype='highpass')
 
@@ -34,7 +33,7 @@ def process_audio(file_path, output_folder):
 
     if df_rois.empty:
         print(f"No ROIs found in file: {file_path}")
-        return pd.DataFrame()
+        return 0
 
     # Format ROIs
     df_rois = format_features(df_rois, tn, fn)
@@ -51,60 +50,29 @@ def process_audio(file_path, output_folder):
 
     if low_freq_rois.empty:
         print(f"No low frequency ROIs found in file: {file_path}")
-        return pd.DataFrame()
+        return 0
 
-    # Extract start and end times of the filtered ROIs
-    low_freq_timestamps = low_freq_rois[['min_t', 'max_t']]
-    low_freq_timestamps.columns = ['begin', 'end']
+    # Return the number of low-frequency ROIs (tags)
+    num_tags = len(low_freq_rois)
+    print(f"Number of tags found in file: {file_path}: {num_tags}")
+    
+    return num_tags
 
-    # Generate audio clips
-    audio_clips = []
-    for i, (start, end) in enumerate(low_freq_timestamps.itertuples(index=False)):
-        start = max(0, start - 0.5)
-        end = min(len(s) / fs, end + 0.5)
-        start_sample = int(start * fs)
-        end_sample = int(end * fs)
-        audio_clip = s[start_sample:end_sample]
-        clip_filename = f'clip_{os.path.basename(file_path).split(".")[0]}_{i}.wav'
-        clip_path = os.path.join(output_folder, clip_filename)
-        sf.write(clip_path, audio_clip, fs)
-        audio_clips.append((start, clip_filename))
+def process_folder(input_folder):
+    total_tags = 0
 
-    # Create DataFrame for the audio clips
-    df_audio_clips = pd.DataFrame(audio_clips, columns=['start_time', 'audio_clip'])
-
-    end_time = time.time()
-    print(f"Finished processing file: {file_path}")
-
-    return df_audio_clips
-
-def process_folder(input_folder, output_folder):
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    all_timestamps = []
     for filename in os.listdir(input_folder):
         if filename.lower().endswith('.wav'):
             file_path = os.path.join(input_folder, filename)
-            timestamps = process_audio(file_path, output_folder)
-            if not timestamps.empty:
-                timestamps['file'] = filename
-                all_timestamps.append(timestamps)
+            num_tags = process_audio(file_path)
+            total_tags += num_tags
 
-    if all_timestamps:
-        # Concatenate all timestamps and save to Excel
-        all_timestamps_df = pd.concat(all_timestamps, ignore_index=True)
-        excel_path = os.path.join(output_folder, 'timestamps.xlsx')
-        all_timestamps_df.to_excel(excel_path, index=False)
-        return all_timestamps_df
-    else:
-        print("No audio clips generated from any files.")
-        return pd.DataFrame()
+    print(f"Total number of tags found in folder: {total_tags}")
+    return total_tags
 
 # Example usage
-input_folder = 'D:/Aqoustics/Unsupervised/Mary Test/Data'
-output_folder = 'D:/Aqoustics/Unsupervised/Mary Test/Clips'
+input_folder = 'D:/Aqoustics/UMAP/Sorted/D_files/'
 start_time = time.time()
-all_timestamps = process_folder(input_folder, output_folder)
+total_tags = process_folder(input_folder)
 end_time = time.time()
 print(f"Total processing time: {end_time - start_time:.2f} seconds")

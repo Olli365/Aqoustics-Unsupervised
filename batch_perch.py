@@ -2,13 +2,11 @@ import os
 import pandas as pd
 import soundfile as sf
 import time
-import numpy as np
-import librosa
-import tensorflow as tf
 from maad import sound
 from maad.util import power2dB, format_features
 from maad.rois import create_mask, select_rois
 from maad.features import centroid_features
+import numpy as np
 
 def process_audio(file_path, output_folder):
     print(f"Processing file: {file_path}")
@@ -21,7 +19,12 @@ def process_audio(file_path, output_folder):
         print(f"Error loading file {file_path}: {e}")
         return pd.DataFrame()
 
-    s_filt = sound.select_bandwidth(s, fs, fcut=100, forder=3, ftype='highpass')
+    try:
+        # Attempt to filter the signal
+        s_filt = sound.select_bandwidth(s, fs, fcut=100, forder=3, ftype='highpass')
+    except ValueError as e:
+        print(f"Skipping file {file_path} due to filtering error: {e}")
+        return pd.DataFrame()
 
     # Spectrogram parameters
     db_max = 70
@@ -31,7 +34,7 @@ def process_audio(file_path, output_folder):
     # Background removal and smoothing
     Sxx_db_rmbg, _, _ = sound.remove_background(Sxx_db)
     Sxx_db_smooth = sound.smooth(Sxx_db_rmbg, std=1.2)
-    im_mask = create_mask(im=Sxx_db_smooth, mode_bin='relative', bin_std=2, bin_per=0.25)
+    im_mask = create_mask(im=Sxx_db_smooth, mode_bin='relative', bin_std=2, bin_per=0.1)
     im_rois, df_rois = select_rois(im_mask, min_roi=50, max_roi=None)
 
     if df_rois.empty:
@@ -41,64 +44,67 @@ def process_audio(file_path, output_folder):
     # Format ROIs
     df_rois = format_features(df_rois, tn, fn)
 
-    # Calculate centroid features
-    df_centroid = centroid_features(Sxx_db, df_rois)
-
-    # Get median frequency and normalize
-    median_freq = fn[np.round(df_centroid.centroid_y).astype(int)]
-    df_centroid['centroid_freq'] = median_freq / fn[-1]
-
     # Filter ROIs for those with centroid frequency below 2000Hz
-    low_freq_rois = df_rois[df_centroid['centroid_freq'] * fn[-1] < 2000]
+    low_freq_rois = df_rois[df_rois['max_f'] <= 2000]
+    print(low_freq_rois)
 
     if low_freq_rois.empty:
         print(f"No low frequency ROIs found in file: {file_path}")
         return pd.DataFrame()
 
+    # **Change**: If more than 30 ROIs, subsample until the number is 30
+    while len(low_freq_rois) > 30:
+        low_freq_rois = low_freq_rois.iloc[::2]  # Keep every 2nd ROI until there are 30 or fewer
+
     # Extract start and end times of the filtered ROIs
     low_freq_timestamps = low_freq_rois[['min_t', 'max_t']]
-    low_freq_timestamps['start_time'] = low_freq_timestamps['min_t']
-    low_freq_timestamps['end_time'] = low_freq_timestamps['max_t']
-    
-    # Generate 5-second clips based on timestamps
-    clips = []
-    for _, row in low_freq_timestamps.iterrows():
-        start_time = row['start_time']
-        end_time = row['end_time']
-        clips.append((start_time, end_time))
-    
-    if len(clips) == 0:
-        return pd.DataFrame()
-    
-    # Ensure clips are at least 5 seconds
-    clips[-1] = (clips[-1][0], max(clips[-1][0] + 5, clips[-1][1]))
-    
-    # Generate audio clips and embeddings
+    low_freq_timestamps.columns = ['begin', 'end']
+
+    # Generate 5-second audio clips with detected region in the middle
     audio_clips = []
-    for i, (start, end) in enumerate(clips):
-        start_sample = int(max(0, start * fs))
-        end_sample = int(min(len(s), end * fs))
+    clip_duration = 2  # seconds
+
+    for i, (start, end) in enumerate(low_freq_timestamps.itertuples(index=False)):
+        mid_point = (start + end) / 2
+        clip_start = max(0, mid_point - clip_duration / 2)
+        clip_end = clip_start + clip_duration
+
+        # Check if the clip is in the first 5 seconds or last 5 seconds of the audio
+        if clip_start < 0:
+            clip_start = 0
+            clip_end = clip_duration
+        elif clip_end > len(s) / fs:
+            clip_end = len(s) / fs
+            clip_start = clip_end - clip_duration
+
+        start_sample = int(clip_start * fs)
+        end_sample = int(clip_end * fs)
         audio_clip = s[start_sample:end_sample]
         clip_filename = f'clip_{os.path.basename(file_path).split(".")[0]}_{i}.wav'
         clip_path = os.path.join(output_folder, clip_filename)
         sf.write(clip_path, audio_clip, fs)
-        audio_clips.append((start, clip_filename))
-        
-        # Generate embedding
-        mel_spectrogram = librosa.feature.melspectrogram(y=audio_clip, sr=fs, n_mels=128, fmax=8000)
-        mel_spectrogram_db = librosa.power_to_db(mel_spectrogram, ref=np.max)
-        
-        feature = {
-            'filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[clip_filename.encode()])),
-            'embedding': tf.train.Feature(float_list=tf.train.FloatList(value=mel_spectrogram_db.flatten())),
-        }
-        example = tf.train.Example(features=tf.train.Features(feature=feature))
-        
-        serialized_example = example.SerializeToString()
-        tfrecord_filename = os.path.join(output_folder, f'embedding_{i}.tfrecord')
-        with tf.io.TFRecordWriter(tfrecord_filename) as writer:
-            writer.write(serialized_example)
-    
+        audio_clips.append((clip_start, clip_filename))
+
+        # Add zero padding to make the clip 5 seconds long
+        target_duration = 5  # target duration in seconds
+        target_samples = int(target_duration * fs)  # target duration in samples
+        current_samples = len(audio_clip)  # current clip length in samples
+
+        if current_samples < target_samples:
+            # Calculate the amount of zero padding needed
+            padding_needed = target_samples - current_samples
+            # Add padding equally to the start and end
+            pad_before = padding_needed // 2
+            pad_after = padding_needed - pad_before
+            # Apply padding
+            padded_clip = np.pad(audio_clip, (pad_before, pad_after), 'constant')
+        else:
+            # If the clip is already the target duration, no padding is needed
+            padded_clip = audio_clip
+
+        # Save the padded clip to the same file
+        sf.write(clip_path, padded_clip, fs)
+
     # Create DataFrame for the audio clips
     df_audio_clips = pd.DataFrame(audio_clips, columns=['start_time', 'audio_clip'])
 
@@ -107,12 +113,17 @@ def process_audio(file_path, output_folder):
 
     return df_audio_clips
 
-def process_folder(input_folder, output_folder):
+
+def process_folder(input_folder, output_folder, prefix=None):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     all_timestamps = []
     for filename in os.listdir(input_folder):
+        # **Change 2**: Process files only with the given prefix
+        if prefix and not filename.startswith(prefix):
+            continue
+
         if filename.lower().endswith('.wav'):
             file_path = os.path.join(input_folder, filename)
             timestamps = process_audio(file_path, output_folder)
@@ -131,11 +142,12 @@ def process_folder(input_folder, output_folder):
         return pd.DataFrame()
 
 
-input_folder = 'D:/Aqoustics/Unsupervised/Perch Test/Audio'
-output_folder = 'D:/Aqoustics/Unsupervised/Perch Test'
+# Example usage
+input_folder = '/mnt/f/mars_global_acoustic_study/australia_acoustics/Degraded_Moth32/'
+output_folder = "/mnt/d/Aqoustics/BEN/Australia_ROI"
+prefix = ""  # Example: Only process files starting with "2023"
+
 start_time = time.time()
-all_timestamps = process_folder(input_folder, output_folder)
+all_timestamps = process_folder(input_folder, output_folder, prefix)
 end_time = time.time()
 print(f"Total processing time: {end_time - start_time:.2f} seconds")
-
-
